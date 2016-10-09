@@ -5,6 +5,7 @@
 #include "Core/NetPlayClient.h"
 #include <algorithm>
 #include <memory>
+#include <sstream>
 #include "Common/Common.h"
 #include "Common/CommonTypes.h"
 #include "Common/ENetUtil.h"
@@ -19,6 +20,7 @@
 #include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "Core/IPC_HLE/WII_IPC_HLE_Device_usb.h"
 #include "Core/Movie.h"
+#include "Core/State.h"
 #include "InputCommon/GCAdapter.h"
 
 static std::mutex crit_netplay_client;
@@ -889,14 +891,41 @@ bool NetPlayClient::GetNetPads(const u8 pad_nb, GCPadStatus* pad_status)
 
   // Now, we either use the data pushed earlier, or wait for the
   // other clients to send it to us
-  while (!m_pad_buffer[pad_nb].Pop(*pad_status))
+  GCPadStatus pad;
+  if (m_pad_buffer[pad_nb].Pop(pad))
   {
-    if (!m_is_running.load())
-      return false;
+    if (m_missed_frames > 0)
+    {
+      std::stringstream ss;
+      ss << "~ Missed " << m_missed_frames << " frames";
+      m_dialog->AppendChat(ss.str());
+
+      // State::LoadStateFromBuffer(m_state);
+    }
+
+    m_last_pads[pad_nb] = *pad_status;
+    m_missed_frames = 0;
+  }
+  else
+  {
+    if (m_missed_frames == 0)
+    {
+      m_dialog->AppendChat("~ Saving state");
+      static std::vector<u8> _state;
+      State::SaveToBuffer(_state);
+    }
+
+
+    m_missed_frames++;
 
     // TODO: use a condition instead of sleeping
     Common::SleepCurrentThread(1);
   }
+
+  *pad_status = pad;
+
+  if (!m_is_running.load())
+    return false;
 
   if (Movie::IsRecordingInput())
   {

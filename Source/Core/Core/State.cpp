@@ -9,6 +9,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
@@ -184,11 +185,11 @@ static std::string DoState(PointerWrap& p)
 
 void LoadFromBuffer(std::vector<u8>& buffer)
 {
-  if (NetPlay::IsNetPlayRunning())
-  {
-    OSD::AddMessage("Loading savestates is disabled in Netplay to prevent desyncs");
-    return;
-  }
+  // if (NetPlay::IsNetPlayRunning())
+  // {
+  //   OSD::AddMessage("Loading savestates is disabled in Netplay to prevent desyncs");
+  //   return;
+  // }
 
   bool wasUnpaused = Core::PauseAndLock(true);
 
@@ -380,6 +381,80 @@ static void CompressAndDumpState(CompressAndDumpState_args save_args)
   Host_UpdateMainFrame();
 }
 
+bool SaveStateToBuffer(std::vector<u8>& buffer, bool lock)
+{
+  bool savedSuccessfully = true;
+  bool wasUnpaused;
+
+  // Pause the core while we save the state
+  if (lock)
+  {
+    std::cout << "Pausing";
+    wasUnpaused = Core::PauseAndLock(true);
+  }
+
+  // Measure the size of the buffer.
+  // std::cout << "Measuring size";
+  u8* ptr = nullptr;
+  // PointerWrap p(&ptr, PointerWrap::MODE_MEASURE);
+  // DoState(p);
+  // const size_t buffer_size = reinterpret_cast<size_t>(ptr);
+  const size_t buffer_size = 91560901;
+
+  std::cout << "Size is " << buffer_size;
+
+  // Then actually do the write.
+
+  PointerWrap p(&ptr, PointerWrap::MODE_MEASURE);
+  {
+    std::cout << "Resizing buffer";
+    buffer.resize(buffer_size);
+    ptr = &buffer[0];
+    std::cout << "Preparing write";
+    p = PointerWrap(&ptr, PointerWrap::MODE_WRITE);
+    // p.SetMode(PointerWrap::MODE_WRITE);
+    std::cout << "Writing";
+    DoState(p);
+  }
+
+  if (p.GetMode() == PointerWrap::MODE_WRITE)
+  {
+    // CompressAndDumpState_args save_args;
+    // save_args.buffer_vector = &g_current_buffer;
+    // save_args.buffer_mutex = &g_cs_current_buffer;
+    // save_args.filename = filename;
+    // save_args.wait = wait;
+
+    std::cout << "Flushing";
+
+    Flush();
+    // g_save_thread = std::thread(CompressAndDumpState, save_args);
+    // g_compressAndDumpStateSyncEvent.Wait();
+
+    // g_last_filename = filename;
+
+    std::cout << "Flushed";
+
+    savedSuccessfully = true;
+  }
+  // else
+  // {
+  //   // someone aborted the save by changing the mode?
+  //   Core::DisplayMessage("Unable to save: Internal DoState Error", 4000);
+  // }
+
+  // Resume the core and disable stepping
+  if (lock)
+  {
+    std::cout << "Continuing";
+    Core::PauseAndLock(false, wasUnpaused);
+  }
+
+  std::cout << "Done";
+
+  return savedSuccessfully;
+}
+
 void SaveAs(const std::string& filename, bool wait)
 {
   // Pause the core while we save the state
@@ -518,6 +593,80 @@ static void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_
 
   // all good
   ret_data.swap(buffer);
+}
+
+bool LoadStateFromBuffer(std::vector<u8>& buffer, bool lock)
+{
+  if (!Core::IsRunning())
+  {
+    return false;
+  }
+
+  // Stop the core while we load the state
+  bool wasUnpaused;
+  if (lock)
+    wasUnpaused = Core::PauseAndLock(true);
+
+  g_loadDepth++;
+
+  // Save temp buffer for undo load state
+  // if (!Movie::IsJustStartingRecordingInputFromSaveState())
+  // {
+  //   std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
+  //   SaveToBuffer(g_undo_load_buffer);
+  //   if (Movie::IsMovieActive())
+  //     Movie::SaveRecording(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
+  //   else if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm"))
+  //     File::Delete(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
+  // }
+
+  bool loaded = false;
+  bool loadedSuccessfully = false;
+  std::string version_created_by;
+
+  if (!buffer.empty())
+  {
+    u8* ptr = &buffer[0];
+    PointerWrap p(&ptr, PointerWrap::MODE_READ);
+    version_created_by = DoState(p);
+    loaded = true;
+    loadedSuccessfully = (p.GetMode() == PointerWrap::MODE_READ);
+  }
+
+  // if (loaded)
+  // {
+  //   if (loadedSuccessfully)
+  //   {
+  //     Core::DisplayMessage(StringFromFormat("Loaded state from %s", filename.c_str()), 2000);
+  //     if (File::Exists(filename + ".dtm"))
+  //       Movie::LoadInput(filename + ".dtm");
+  //     else if (!Movie::IsJustStartingRecordingInputFromSaveState() &&
+  //              !Movie::IsJustStartingPlayingInputFromSaveState())
+  //       Movie::EndPlayInput(false);
+  //   }
+  //   else
+  //   {
+  //     // failed to load
+  //     Core::DisplayMessage("Unable to load: Can't load state from other versions!", 4000);
+  //     if (!version_created_by.empty())
+  //       Core::DisplayMessage("The savestate was created using " + version_created_by, 4000);
+
+  //     // since we could be in an inconsistent state now (and might crash or whatever), undo.
+  //     if (g_loadDepth < 2)
+  //       UndoLoadState();
+  //   }
+  // }
+
+  if (g_onAfterLoadCb)
+    g_onAfterLoadCb();
+
+  g_loadDepth--;
+
+  return loadedSuccessfully;
+
+  // resume dat core
+  if (lock)
+    Core::PauseAndLock(false, wasUnpaused);
 }
 
 void LoadAs(const std::string& filename)

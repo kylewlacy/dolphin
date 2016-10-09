@@ -268,8 +268,12 @@ private:
   void OnScreenshot(wxCommandEvent& event);
   void OnActive(wxActivateEvent& event);
   void OnClose(wxCloseEvent& event);
+
+public:
   void OnLoadState(wxCommandEvent& event);
   void OnSaveState(wxCommandEvent& event);
+
+private:
   void OnLoadStateFromFile(wxCommandEvent& event);
   void OnSaveStateToFile(wxCommandEvent& event);
   void OnLoadLastState(wxCommandEvent& event);

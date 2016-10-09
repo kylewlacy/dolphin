@@ -316,6 +316,18 @@ void NetPlayDialog::StopGame()
   main_frame->DoStop();
 }
 
+void NetPlayDialog::OnSaveState()
+{
+  wxCommandEvent event;
+  main_frame->OnSaveState(event);
+}
+
+void NetPlayDialog::OnLoadState()
+{
+  wxCommandEvent event;
+  main_frame->OnLoadState(event);
+}
+
 // NetPlayUI methods called from ---NETPLAY--- thread
 void NetPlayDialog::Update()
 {

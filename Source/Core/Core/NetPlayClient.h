@@ -26,6 +26,9 @@ public:
   virtual void BootGame(const std::string& filename) = 0;
   virtual void StopGame() = 0;
 
+  virtual void OnSaveState() = 0;
+  virtual void OnLoadState() = 0;
+
   virtual void Update() = 0;
   virtual void AppendChat(const std::string& msg) = 0;
 
@@ -99,6 +102,12 @@ protected:
 
   std::array<Common::FifoQueue<GCPadStatus>, 4> m_pad_buffer;
   std::array<Common::FifoQueue<NetWiimote>, 4> m_wiimote_buffer;
+
+  // TODO: missed frames for each pad
+  u32 m_missed_frames = 0;
+  std::array<Common::FifoQueue<GCPadStatus>, 4> m_queued_pads;
+  std::array<GCPadStatus, 4> m_last_pads;
+  std::vector<u8> m_state;
 
   NetPlayUI* m_dialog = nullptr;
 

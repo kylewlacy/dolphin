@@ -49,6 +49,9 @@ public:
   void BootGame(const std::string& filename) override;
   void StopGame() override;
 
+  void OnSaveState() override;
+  void OnLoadState() override;
+
   void Update() override;
   void AppendChat(const std::string& msg) override;
 
